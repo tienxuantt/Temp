@@ -1,0 +1,101 @@
+oSearchDataPartial.executeAllTenants = function executeAllTenants(tenants) {
+	let me = this;
+
+	// Số tỉnh chạy cùng một thời điểm
+	me.maxTenantProcess = 60;
+	// Mỗi lần call store xử lý bao nhiêu tài sản
+	me.maxOrganProcess = 15;
+
+	me.tenantAll = tenants;
+	me.totalTenants = me.tenantAll.length;
+	me.numberTenantRunSuccess = 0;
+	me.numberTenantRun = 0;
+
+	for (var i = 0; i < me.maxTenantProcess; i++) {
+		let name = "Tenant_" + i;
+		me.executeTenantProcess(name);
+	}
+};
+
+oSearchDataPartial.executeOrganProcess = async function executeOrganProcess(name) {
+	let me = this;
+
+		if (me[name]["TotalExecute"] > 0) {
+			me[name]["TotalExecute"] -= 1;
+
+			let params = {
+				tenant_id: me[name]["TenantFocus"].tenant_id,
+				query: `CALL Proc_Jira_UpdateCustomOrgan(${me.maxOrganProcess});`
+			};
+
+			me.params = params;
+
+			let res = await me.getSearchDataByOrgan();
+
+			if (res && res.Status === MISA.Enumeration.ServiceStatus.Success && res.Data) {
+				me.executeOrganProcess(name);
+			} else {
+				me.executeOrganProcess(name);
+			}
+		
+		} else {
+			me.numberTenantRunSuccess += 1;
+			console.log(me[name]["TenantFocus"].tenant_code + " - " + me[name]["TenantFocus"].tenant_name + " _done_" + me.numberTenantRunSuccess);
+			me.executeTenantProcess(name);
+		}
+};
+
+oSearchDataPartial.executeTenantProcess = async function executeTenantProcess(name) {
+	let me = this,
+		queryOrgan = 'select count(*) as Total from fa_jira_execute fje WHERE fje.type = 0;';
+
+	if (me.numberTenantRunSuccess <= me.totalTenants) {
+		let tenantFocus = me.tenantAll.pop(),
+			params = {
+				tenant_id: tenantFocus ? tenantFocus.tenant_id : null,
+				query: queryOrgan
+			};
+
+		me.params = params;
+
+		if (tenantFocus) {
+
+			let res = await me.getSearchDataByOrgan();
+
+			if (res && res.Status === MISA.Enumeration.ServiceStatus.Success && res.Data) {
+				if (res.Data.length >= 0) {
+					me[name] = me[name] || {};
+					me[name]["TenantFocus"] = tenantFocus;
+					me[name]["TotalOrgan"] = res.Data[0].Total;
+					me[name]["TotalExecute"] = parseInt(me[name]["TotalOrgan"] / me.maxOrganProcess) + 1;
+
+					me.executeOrganProcess(name);
+				}
+			} else {
+				me.numberTenantRunSuccess += 1;
+				me.executeTenantProcess(name);
+			}
+		}
+	}
+};
+
+oSearchDataPartial.getSearchDataByOrgan = function getSearchDataByOrgan() {
+	return new Promise((resolve, reject) => {
+		let me = this,
+			url = MISAUtil.getServiceUrl(MISA.Enumeration.MicroserviceType.Core, "ExecuteScript", "OrganizationManagement"),
+			param = me.getParamCallServer();
+
+		if (url) {
+			AjaxJSON(url, { type: "POST", async: true, }, param, res => {
+					resolve(res);
+				},
+				res => {
+					reject(res);
+				}
+			)
+		}
+	})
+};
+
+oSearchDataPartial.onclickSurvey({executeStore: true});
+// delete from jira_fixed_asset_survey ;

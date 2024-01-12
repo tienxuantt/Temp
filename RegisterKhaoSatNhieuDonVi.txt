@@ -1,0 +1,181 @@
+oSearchDataPartial.surveyDetail = true;
+
+oSearchDataPartial.executeAllTenants = function executeAllTenants(tenants) {
+	let me = this;
+	
+	$('.total-record').show();
+
+	// Số tỉnh chạy cùng một thời điểm
+	me.maxTenantProcess = 45;
+	// Mỗi lần call store xử lý bao nhiêu đơn vị
+	me.maxOrganProcess = 1;
+
+	me.tenantAll = tenants;
+	me.totalTenants = me.tenantAll.length;
+	me.numberTenantRunSuccess = 0;
+	me.numberTenantRun = 0;
+
+	for (var i = 0; i < me.maxTenantProcess; i++) {
+		let name = "Tenant_" + i;
+		me.executeTenantProcess(name);
+	}
+};
+
+oSearchDataPartial.executeTenantProcess = async function executeTenantProcess(name) {
+	let me = this,
+		queryOrgan = 'select count(*) as Total from dic_organization;';
+
+	if (me.numberTenantRunSuccess <= me.totalTenants) {
+		let tenantFocus = me.tenantAll.pop(),
+			params = {
+				tenant_id: tenantFocus ? tenantFocus.tenant_id : null,
+				query: queryOrgan
+			};
+
+		me.params = params;
+
+		if (tenantFocus) {
+
+			let res = await me.getSearchDataByOrgan();
+
+			if (res && res.Status === MISA.Enumeration.ServiceStatus.Success && res.Data) {
+				if (res.Data.length >= 0) {
+					me[name] = me[name] || {};
+					me[name]["TenantFocus"] = tenantFocus;
+					me[name]["TotalOrgan"] = res.Data[0].Total;
+					me[name]["TotalExecute"] = parseInt(me[name]["TotalOrgan"] / me.maxOrganProcess) + 1;
+
+					me.executeOrganProcess(name);
+				}
+			} else {
+				me.numberTenantRunSuccess += 1;
+				me.executeTenantProcess(name);
+			}
+		}
+	}
+};
+
+oSearchDataPartial.executeOrganProcess = async function executeOrganProcess(name) {
+	let me = this;
+
+		if (me[name]["TotalExecute"] > 0) {
+			me[name]["TotalExecute"] -= 1;
+
+			let params = {
+				tenant_id: me[name]["TenantFocus"].tenant_id,
+				query: `CALL Proc_Jira_UpdateCustomOrgan(${me.maxOrganProcess});`
+			};
+
+			me.params = params;
+
+			let res = await me.getSearchDataByOrgan();
+
+			if (res && res.Status === MISA.Enumeration.ServiceStatus.Success && res.Data) {
+				if (res.Data.length > 0) {
+					// Cập nhật thêm tên tỉnh
+					res.Data.filter(function (item) {
+						item.tenant_name = me[name]["TenantFocus"].tenant_name;
+					});
+
+					me.listData = me.listData.concat(res.Data);
+					me.totalRecord += res.Data.length;
+					$(".total-record b").text(me.totalRecord);	   
+                }
+						
+				me.executeOrganProcess(name);
+			} else {
+				me.executeOrganProcess(name);
+			}
+		
+		} else {
+			me.numberTenantRunSuccess += 1;
+			console.log(me[name]["TenantFocus"].tenant_code + " - " + me[name]["TenantFocus"].tenant_name + " _done_" + me.numberTenantRunSuccess);
+			me.executeTenantProcess(name);
+		}
+};
+
+oSearchDataPartial.buildBody = function buildBody(data, bodyAppend){
+	let me = this,
+            tbody = $("<tbody></tbody>");
+
+        data.filter(function (item, index) {
+            let tr = $("<tr></tr>"),
+				tenant_name = item['tenant_name'];
+
+            if (tenant_name) {
+                tr.append($(`<td scope="row">${tenant_name}</td>`));
+            } else {
+                tr.append($(`<td scope="row">${index + 1}</td>`));
+            }
+
+            for (var prop in item) {
+				if(prop != 'tenant_name'){
+					let td = $('<td scope="row"></td>');
+
+					td.text(item[prop]);
+					tr.append(td);
+				}
+            }
+
+            if (bodyAppend) {
+                bodyAppend.append(tr);
+            } else {
+                tbody.append(tr);
+            }
+        });
+
+    return tbody;
+};
+
+oSearchDataPartial.renderResultMulti = function renderResultMulti(){
+	 let me = this,
+			dataRender = [],
+            table = $('<table class="table"></table>');
+		
+		me.totalRecord = 0;
+		$(".data-management-content .table-result .table").remove();
+			
+		if(me.totalRecord < 5000){
+			dataRender = me.listData.slice(0,5000 - me.totalRecord);
+			me.listData = me.listData.slice(5000 - me.totalRecord);
+			
+			let firstRow = dataRender[0];
+			
+			if ($(".table-result").find("thead").length == 0) {
+				let thead = me.buildHeader(firstRow),
+					tbody = me.buildBody(dataRender,null);
+
+				table.append(thead);
+				table.append(tbody);
+
+				$(".table-result").html(table);
+			} else {
+				me.buildBody(dataRender, $(".table-result").find("tbody"));
+			}
+		}
+};
+
+oSearchDataPartial.buildHeader = function buildHeader(data){
+	let me = this,
+		thead = $("<thead></thead>"),
+		tr = $("<tr></tr>");
+
+	tr.append($('<th scope="col">Tỉnh</th>'));
+
+	for (var prop in data) {
+		if(prop != 'tenant_name'){
+			let td = $('<th scope="col"></th>');
+
+			td.text(prop);
+			tr.append(td);
+		}
+	}
+
+	thead.append(tr);
+
+	return thead;
+};
+
+oSearchDataPartial.onclickSurvey({executeStore: true});
+// delete from dic_organ_survey_normalize;
+// oSearchDataPartial.renderResultMulti();

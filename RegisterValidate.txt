@@ -1,0 +1,44 @@
+oSearchDataPartial.getSearchDataByOrgan = function getSearchDataByOrgan() {
+	return new Promise((resolve, reject) => {
+		let me = this,
+			url = MISAUtil.getServiceUrl(MISA.Enumeration.MicroserviceType.Core, "ExecuteScript", "OrganizationManagement"),
+			param = me.getParamCallServer();
+
+		if (url) {
+			AjaxJSON(url, { type: "POST", async: true, }, param, res => {
+					resolve(res);
+				},
+				res => {
+					reject(res);
+				}
+			)
+		}
+	})
+};
+
+oSearchDataPartial.validateForm = function validateForm(detail) {
+	let me = this,
+		isValid = true;
+
+	// Lấy dữ liệu nhập vào
+	me.params.query = $("#txtSearchData").val();
+
+	if ((detail && !me.params.tenant_id) || !me.params.query) {
+		isValid = false;
+
+		MISAMessageBox.toastrError("Vui lòng chọn tỉnh và nhập câu lệnh truy vấn!");
+	}
+
+	return isValid;
+};
+
+oStatisticErrorVersionComparePartial.validateForm = function validateForm() {
+	let me = this,
+		pattern = ['create ','insert ','update ','delete ','drop ','alter ','exec ','truncate ','rename ','set ','import ','lock ','use '],
+		isValid = true;
+
+	// Lấy dữ liệu nhập vào
+	me.params.query = $("#txtSearchData2").val();
+
+	return isValid;
+};

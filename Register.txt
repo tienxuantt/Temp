@@ -1,0 +1,62 @@
+oSearchDataPartial.listQuery = 
+[
+	"CALL Proc_Jira_KhaoSat_FixedAssetError( 9,'20fa34bb-451e-4990-96db-9449b6861b81','22/11/2023 11:30:00');"
+];
+
+oSearchDataPartial.getDataSurvey = async function getDataSurvey() {
+	let me = this;
+	
+	if (me.tenants && me.tenants.length > 0) {
+		if (me.tenantActive < me.tenants.length) {
+			let tenant = me.tenants[me.tenantActive]
+			  , params = {
+				tenant_id: tenant.tenant_id,
+				query: $("#txtSearchData").val()
+			};
+			me.params = params;
+			me.tenantActive++;
+			try {
+				let res = await me.getSearchDataByOrgan();
+				if (res && res.Status === MISA.Enumeration.ServiceStatus.Success && res.Data) {
+					if (res.Data.length > 0) {
+						res.Data.filter(function(item) {
+							item.tenant_name = tenant.tenant_name;
+						});
+						me.listData = me.listData.concat(res.Data);
+						if (me.surveyDetail) {
+							me.totalRecord += res.Data.length;
+							me.renderResultMulti();
+							$(".total-record b").text(me.totalRecord);
+						} else {
+							let tr = $(` <tr class='new-row' itemId='${tenant.tenant_id}'>
+									<td>${tenant.tenant_name}</td>
+									<td>${res.Data.length}</td>
+								</tr>`);
+							$(".grid-survey-data tbody").append(tr);
+							me.increTotalRecord(res.Data.length);
+						}
+					}
+					await me.getDataSurvey();
+				} else {
+					await me.getDataSurvey();
+				}
+			} catch (e) {
+				await me.getDataSurvey();
+			}
+		} else {
+			MISALoader.hideMask();
+			me.interval = false;
+			
+			if(me.listQuery.length > 0){
+				let queryNext = me.listQuery.pop();
+				
+				$("#txtSearchData").val(queryNext);
+				$("#btn-survey-data").click();
+			}else{
+				MISAMessageBox.toastrSuccess("Đã khảo sát xong", {
+					time: 1000000
+				});
+			}
+		}
+	}
+};
